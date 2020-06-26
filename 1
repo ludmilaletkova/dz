@@ -1,0 +1,358 @@
+#include <stdio.h>
+#include <ctype.h>
+#include <string.h>       
+#include <malloc.h>       
+#include <time.h>         
+#include <locale.h>       
+
+#define MAXLENGHT 200
+
+struct Node {
+    char* ISBN;         //êîä ISBN
+    char* name;         //Íàèìåíîâàíèå êíèãè
+    char* author;       //Àâòîð êíèãè
+    int all_count;      //Êîëè÷åñêîâî êíèã â áèáëèîòåêå
+    int student_count;  //Êîëè÷åñòâî êíèã ó ñòóäåíòîâ
+    struct Node* left;  //Ëåâàÿ âåòâü äåðåâà
+    struct Node* right; //Ïðàâàÿ âåòâü äåðåâà
+};
+
+void editFile(struct Node* p, FILE* file);
+struct Node* readFile(char* strFile);                                   //÷òåíèå ñòðîêè èç CSV-ôàéëà
+struct Node* MakeBook(struct Node* p, struct Node* new_tree);           //äîáàâëåíèå êíèãè                   
+void removeList(char* value, struct Node* root, struct Node* t);        //óäàëåíèå êíèãè                      
+void BooksInfo(struct Node* p);                                         //âûâîä èíôîðìàöèè î âñåõ êíèãàõ    
+void MakeBackUp(struct Node* p);                                        //ñîçäàíèå áýêàïà                      
+void useBackUp(FILE* my_BackUp);                                        //èñïîëüçîâàíèå áýêàïà                 
+void searchAuthor(struct Node* p, char* author);                        //ïîèñê ïî àâòîðó            
+void printBookInfo(struct Node* p, char* ISBNprint);                    //âûâîä èíôîðìàöèè
+struct Node* FindSwapRemove(char* buf, struct Node* root);
+void removeSwap(char* buf, struct Node* root);
+int number(char a[]);                                                   //ïåðåâîä ñòðîêè â ÷èñëî
+char* copymal(char* s);                                                 //ñîçäàíèå ñòðîêè ðàâíóþ s
+
+
+int main() {
+    setlocale(LC_ALL, "Russian");
+    int answer = 0;
+    char* line = (char*)malloc((200) * sizeof(char));;
+    struct Node* root = NULL, * tree;
+    FILE* file = fopen("books.csv", "r");
+    while (fgets(line, MAXLENGHT, file) != NULL) {
+        tree = readFile(line);
+        root = MakeBook(root, tree);
+    }
+    printf("Âûáåðèòå äåéñòâèå:\n");
+    printf("1)Äîáàâëåíèå  \n2)Óäàëåíèå \n4)Âûâîä êíèã\n9)Ñäåëàòü áýêàï \n10)Âîññòàíîâèòü èç áýêàïà \n11)Ïîèñê êíèãè ïî àâòîðó\n12)Çàâåðøåíèå ïðîãðàììû\n");
+    scanf("%d", &answer);
+    while (answer != 12) {
+        switch (answer)
+        {
+        case 1:
+            printf("Äîáàâèòü êíèãó :\n");
+            scanf("%s", line);
+            tree = readFile(line);
+            root = MakeBook(root, tree);
+            printf("Óñïåøíî!\n");
+            break;
+        case 2:
+            printf("Óäàëèòü êíèãó :\n");
+            scanf("%s", line);
+            removeList(line, root, root);
+            printf("Óñïåøíî!\n");
+            break;
+        case 4:
+            printf("Âñå êíèãè\n");
+            BooksInfo(root);
+            break;
+        case 9:
+            printf("Ñîçäàíèå áýêàïà\n");
+            MakeBackUp(root);
+            printf("Óñïåøíî!\n");
+            break;
+        case 10: {
+            printf("Èñïîëüçîâàíèå áýêàïà\n");
+            scanf("%s", line);
+            FILE* file_buf = fopen(line, "r");
+            useBackUp(file_buf);
+            break; }
+        case 11: {
+            printf("Ïîèñê ïî àâòîðó êíèãè :\n");
+            scanf("%s", line);
+            printf("%s\n", line);
+            searchAuthor(root, line);
+            break; } 
+        case 12:
+            printf("Goodbye!");
+            fclose(file);
+        }
+        scanf("%d", &answer);
+    }
+    return 0;
+}
+
+
+int number(char a[]) {    //ïåðåâîä èç ñòðîêè â ÷èñëî
+    int found = 0,
+        i = 0;
+    while (a[i] != '\0') {
+        found = found * 10 + (a[i] - '0'); // êîä ýëåìåíòà ïî ñàìîìó ÷èñëó
+        i++;
+    }
+    return found;
+}
+
+char* numberInChar(int number) { //ïåðåâîä èç ÷èñëà â ñòðîêó
+    char* buf = (char*)malloc(4 * sizeof(char)); // ìàññèâ-áóôôåð
+    int i, j = -1;
+    i = number;
+    while (i != 0) {
+        i /= 10;
+        j++;
+    }
+    buf[j + 1] = '\0';
+    while (number != 0) {
+        i = number % 10;
+        number /= 10;
+        buf[j] = i + '0';
+        j--;
+    }
+    return buf;
+}
+
+char* copymal(char* s) { //ñîçäàíèå ñòðîêè s 
+    char* p;             //êîëè÷åñòâî ïàìÿòè
+    p = (char*)malloc(strlen(s) + 1);
+    if (p != NULL)
+        strcpy(p, s);
+    return p;
+}
+
+struct Node* readFile(char* strFile) {//÷òåíèå ñòðîêè èç CSV-ôàéëà
+    struct Node* np;                       
+    np = (struct Node*) malloc(sizeof(struct Node));
+    char* buf = (char*)malloc(sizeof(char));
+    int i = 0,
+        j = 0;
+    while (strFile[i] != ';') {   //?÷òåíèå êóñêà ñòðîêè äî ;
+        buf = (char*)realloc(buf, (i + 1) * sizeof(char));
+        buf[j] = strFile[i];
+        i++;
+        j++;
+    }
+    buf[j] = '\0';
+    np->ISBN = copymal(buf); // ïðèñâàåíèå ñòðóêòóðå çíà÷åíèå áóôôåðà
+    j = 0;
+    i++;
+    buf = (char*)malloc(sizeof(char));
+    while (strFile[i] != ';') {
+        buf = (char*)realloc(buf, (i + 1) * sizeof(char));
+        buf[j] = strFile[i];
+        i++;
+        j++;
+    }
+    buf[j] = '\0';
+    np->author = copymal(buf);
+
+    j = 0;
+    i++;
+    free(buf);
+    buf = (char*)malloc(sizeof(char));
+    while (strFile[i] != ';') {
+        buf = (char*)realloc(buf, (i + 1) * sizeof(char));
+        buf[j] = strFile[i];
+        i++;
+        j++;
+    }
+    buf[j] = '\0';
+    np->name = copymal(buf);
+
+    j = 0;
+    i++;
+    free(buf);
+    buf = (char*)malloc(sizeof(char));
+    while (strFile[i] != ';') {
+        buf = (char*)realloc(buf, (i + 1) * sizeof(char));
+        buf[j] = strFile[i];
+        i++;
+        j++;
+    }
+    buf[j] = '\0';
+    np->all_count = number(buf);
+
+    j = 0;
+    i++;
+    free(buf);
+    buf = (char*)malloc(sizeof(char));
+    while (strFile[i] != '\n') {
+        buf = (char*)realloc(buf, (i + 1) * sizeof(char));
+        buf[j] = strFile[i];
+        i++;
+        j++;
+    }
+    buf[j] = '\0';
+    np->student_count = number(buf);
+    np->left = np->right = NULL;
+    return np;
+}
+
+struct Node* FindSwapRemove(char* buf, struct Node* root) {
+    int cond;
+    struct Node* p = NULL;
+    if ((cond = strcmp(buf, root->ISBN)) == 0) {
+        if (root->right == NULL)  p = root;
+        else {
+            p = root->right;
+            while (p->left != NULL) {
+                p = p->left;
+            }
+        }
+    }
+    else
+        if (cond > 0)
+            p = FindSwapRemove(buf, root->right);
+        else
+            p = FindSwapRemove(buf, root->left);
+    return p;
+}
+
+void removeSwap(char* buf, struct Node* root) {
+    int cond;
+    if ((cond = strcmp(root->ISBN, buf)) == 1) {
+        if ((cond = strcmp(buf, root->left->ISBN)) == 0) {
+            root->left = NULL;
+        }
+        else
+            removeSwap(buf, root->left);
+    }
+    else {
+        if ((cond = strcmp(buf, root->right->ISBN)) == 0) {
+            root->right = NULL;
+        }
+        else
+            removeSwap(buf, root->right);
+    }
+}
+
+void printBookInfo(struct Node* p, char* ISBNprint) { //âûâîä èíôîðìàöèè
+    int cond;                                         //ISBN êíèãè
+    if ((cond = strcmp(ISBNprint, p->ISBN)) == 0) {
+        printf("%s;%s;%s;%d;%d\n", p->ISBN, p->author, p->name, p->all_count, p->student_count);
+    }
+    else if (cond < 0)
+        printBookInfo(p->left, ISBNprint);
+    else
+        printBookInfo(p->right, ISBNprint);
+}
+
+void editFile(struct Node* p, FILE* file) {//äîáàâëåíèå â ôàéë
+    if (p != NULL) {                          //âñåãî áèíàðíîãî äåðåâà
+        editFile(p->left, file);
+        fputs(p->ISBN, file);
+        fputs(";", file);
+        fputs(p->author, file);
+        fputs(";", file);
+        fputs(p->name, file);
+        fputs(";", file);
+        fputs(numberInChar(p->all_count), file);
+        fputs(";", file);
+        fputs(numberInChar(p->student_count), file);
+        fputs(";", file);
+        fputs("\n", file);
+        editFile(p->right, file);
+    }
+}
+
+struct Node* MakeBook(struct Node* p, struct Node* new_tree) {//äîáàâëåíèå
+    int cond;
+    if (p == NULL)  p = new_tree;
+    else if ((cond = strcmp(new_tree->ISBN, p->ISBN)) == 0)
+        printf("The book <<%s>> is already in the database", p->name);
+    else if (cond < 0)
+        p->left = MakeBook(p->left, new_tree);
+    else
+        p->right = MakeBook(p->right, new_tree);
+    return p;
+}
+
+void removeList(char* value, struct Node* root, struct Node* t) {//óäàëåíèå
+    int cond;
+    char* buf_ISBN, * buf_author, * buf_name;
+    int buf_all_count, buf_student_count;
+    struct Node* p = FindSwapRemove(value, root);
+    if ((cond = strcmp(value, root->ISBN)) == 0) {
+        buf_ISBN = copymal(p->ISBN);
+        buf_author = copymal(p->author);
+        buf_name = copymal(p->name);
+        buf_all_count = p->all_count;
+        buf_student_count = p->student_count;
+        removeSwap(p->ISBN, t);
+        root->ISBN = copymal(buf_ISBN);
+        root->author = copymal(p->author);
+        root->name = copymal(p->name);
+        root->all_count = buf_all_count;
+        root->student_count = buf_student_count;
+    }
+    else if (cond > 0)
+        removeList(value, root->right, t);
+    else removeList(value, root->left, t);
+}
+
+void BooksInfo(struct Node* p) { //âûâîä î âñåõ êíèãàõ
+    if (p != NULL) {
+        BooksInfo(p->left);
+        printf("%s;%s;%s;%d;%d\n", p->ISBN, p->author, p->name, p->all_count, p->student_count);
+        BooksInfo(p->right);
+    }
+}
+
+void MakeBackUp(struct Node* p) {//ñîçäàíèå áýêàïà
+    //ïåðåìåííàÿ äëÿ ñèñòåìíîãî âðåìåíè 
+    time_t s_time;
+    //óêàçàòåëü íà ñòðóêòóðó ñ ëîêàëüíûì âðåìåíåì
+    struct tm* m_time;
+    //ñòðîêà äëÿ ñîõíàíåíèÿ ïðåîáðàçîâàíèÿ âðåìåíè
+    char str_t[128];
+    //ñ÷èòûâàíèå âðåìåíè
+    s_time = time(NULL);
+    //ïðåîáðàçîâàíèå ñèñòåìíîãî âðåìåíè â ëîêàëüíîå
+    m_time = localtime(&s_time);
+
+    //ïðåîáðàçîâàíèå ëîêàëüíîãî âðåìåíè â òåêñòîâóþ ñòðîêó
+    strftime(str_t, 128, "%x_%X", m_time);
+
+    int i = 0;
+    while (str_t[i] != '\0') {
+        if (str_t[i] == ':') str_t[i] = '_';
+        i++;
+    }
+    str_t[i] = '.';
+    str_t[i + 1] = 'c';
+    str_t[i + 2] = 's';
+    str_t[i + 3] = 'v';
+    str_t[i + 4] = '\0';
+    str_t[0] = 'F';
+    printf("%s\n", str_t);
+    FILE* file = fopen(str_t, "a+");
+    editFile(p, file);
+    fclose(file);
+}
+
+void useBackUp(FILE* my_BackUp) {//èñïîëüçîâàíèå áýêàïà
+    char line[100];
+    FILE* file = fopen("books.csv", "w");
+    while (fgets(line, MAXLENGHT, my_BackUp) != NULL) {
+        fputs(line, file);
+    }
+    fclose(file);
+}
+
+void searchAuthor(struct Node* p, char* author) {//ïîèñê ïî àâòîðó
+    if (p != NULL) {
+        searchAuthor(p->left, author);
+        if ((strcmp(p->author, author) == 0) && (p->all_count - p->student_count != 0)) {
+            printf("%s;%s;%s;%d;%d\n", p->ISBN, p->author, p->name, p->all_count, p->student_count);
+        }
+        searchAuthor(p->right, author);
+    }
+}
